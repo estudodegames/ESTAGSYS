@@ -1,0 +1,6 @@
+{
+  "name": "Frequência de Estágio Escolar",
+  "description": "Sistema completo de controle e relatório de frequência mensal para estagiários internos e externos com cadastro de alunos, turmas e impressão oficial.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
