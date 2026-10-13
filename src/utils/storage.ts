@@ -2,7 +2,9 @@ import {
   Student,
   MonthlyMeetingControl,
   SchoolSettings,
+  AppUser,
 } from '../types';
+import { loadUsers, saveUsers } from './authStorage';
 
 const STORAGE_KEYS = {
   STUDENTS: 'estagio_students_v4',
@@ -270,6 +272,86 @@ export function saveSettings(settings: SchoolSettings): void {
   }
 }
 
+export interface AppExportData {
+  version: string;
+  exportDate: string;
+  students: Student[];
+  meetings: MonthlyMeetingControl[];
+  schoolSettings: SchoolSettings;
+  users?: AppUser[];
+}
+
+export function exportAllAppData(): AppExportData {
+  return {
+    version: '1.0',
+    exportDate: new Date().toISOString(),
+    students: loadStudents(),
+    meetings: loadAllMeetings(),
+    schoolSettings: loadSettings(),
+    users: loadUsers(),
+  };
+}
+
+export function importAllAppData(rawJsonOrObj: string | AppExportData): {
+  success: boolean;
+  message: string;
+  countStudents: number;
+  countMeetings: number;
+} {
+  try {
+    let data: AppExportData;
+    if (typeof rawJsonOrObj === 'string') {
+      data = JSON.parse(rawJsonOrObj);
+    } else {
+      data = rawJsonOrObj;
+    }
+
+    if (!data || typeof data !== 'object') {
+      return {
+        success: false,
+        message: 'Formato inválido: os dados fornecidos não contêm um objeto JSON válido.',
+        countStudents: 0,
+        countMeetings: 0,
+      };
+    }
+
+    let countStudents = 0;
+    let countMeetings = 0;
+
+    if (Array.isArray(data.students)) {
+      saveStudents(data.students);
+      countStudents = data.students.length;
+    }
+
+    if (Array.isArray(data.meetings)) {
+      saveAllMeetings(data.meetings);
+      countMeetings = data.meetings.length;
+    }
+
+    if (data.schoolSettings && typeof data.schoolSettings === 'object') {
+      saveSettings(data.schoolSettings);
+    }
+
+    if (Array.isArray(data.users)) {
+      saveUsers(data.users);
+    }
+
+    return {
+      success: true,
+      message: `Sucesso! Foram importados ${countStudents} estagiários, ${countMeetings} registros de reunião e configurações escolares.`,
+      countStudents,
+      countMeetings,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: `Erro ao importar dados: ${err?.message || 'Arquivo corrompido ou formato não suportado'}.`,
+      countStudents: 0,
+      countMeetings: 0,
+    };
+  }
+}
+
 export function resetAllDataToDefault(): void {
   localStorage.removeItem(STORAGE_KEYS.STUDENTS);
   localStorage.removeItem(STORAGE_KEYS.MEETINGS);
@@ -278,3 +360,4 @@ export function resetAllDataToDefault(): void {
   saveAllMeetings(createSampleMeetings());
   saveSettings(DEFAULT_SETTINGS);
 }
+

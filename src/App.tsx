@@ -34,6 +34,7 @@ import { SchoolSettingsModal } from './components/SchoolSettingsModal';
 import { LoginModal } from './components/LoginModal';
 import { UserManagementModal } from './components/UserManagementModal';
 import { ConfirmDeleteModal } from './components/ConfirmDeleteModal';
+import { SyncModal } from './components/SyncModal';
 
 export default function App() {
   // Theme state (Modo Claro / Modo Escuro)
@@ -85,6 +86,7 @@ export default function App() {
   const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 
   // Selected student
   const selectedStudent =
@@ -163,6 +165,19 @@ export default function App() {
     setIsSettingsModalOpen(false);
   };
 
+  // Sync / Import Data Handler
+  const handleDataImported = () => {
+    const loadedStudents = loadStudents();
+    const loadedMeetings = loadAllMeetings();
+    const loadedSettings = loadSettings();
+    setStudents(loadedStudents);
+    setMeetings(loadedMeetings);
+    setSchoolSettings(loadedSettings);
+    if (loadedStudents.length > 0) {
+      setSelectedStudentId(loadedStudents[0].id);
+    }
+  };
+
   // Auth handlers
   const handleLoginSuccess = (user: AppUser) => {
     setCurrentUser(user);
@@ -185,6 +200,7 @@ export default function App() {
         currentUser={currentUser}
         onLogout={() => setIsConfirmLogoutOpen(true)}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
+        onOpenSync={() => setIsSyncModalOpen(true)}
         onOpenUserManagement={() => setIsUserManagementOpen(true)}
         darkMode={darkMode}
         onToggleDarkMode={setDarkMode}
@@ -326,6 +342,14 @@ export default function App() {
         }}
         onClose={() => setIsSettingsModalOpen(false)}
         onDataReset={handleDataReset}
+        onOpenSync={() => setIsSyncModalOpen(true)}
+      />
+
+      {/* Sync & Backup Modal (Preview ⇄ Vercel) */}
+      <SyncModal
+        isOpen={isSyncModalOpen}
+        onClose={() => setIsSyncModalOpen(false)}
+        onDataImported={handleDataImported}
       />
 
       {/* Login & Registration Modal */}

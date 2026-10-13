@@ -16,6 +16,7 @@ import {
   UserPlus,
   MessageSquare,
   LayoutDashboard,
+  ArrowLeftRight,
 } from 'lucide-react';
 
 export type NavTab = 'dashboard' | 'students' | 'attendance' | 'report_main' | 'consolidated';
@@ -26,6 +27,7 @@ interface NavbarProps {
   currentUser: AppUser | null;
   onLogout: () => void;
   onOpenSettings: () => void;
+  onOpenSync: () => void;
   onOpenUserManagement: () => void;
   darkMode: boolean;
   onToggleDarkMode: (enabled: boolean) => void;
@@ -38,6 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   onLogout,
   onOpenSettings,
+  onOpenSync,
   onOpenUserManagement,
   darkMode,
   onToggleDarkMode,
@@ -148,6 +151,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </button>
 
+              {/* Sincronização e Backup Preview ⇄ Vercel */}
+              <button
+                type="button"
+                onClick={onOpenSync}
+                className="px-2.5 py-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 rounded-xl transition-all flex items-center gap-1.5 shadow-2xs"
+                title="Sincronizar dados entre Preview e Vercel (Copiar/Colar e Backup)"
+              >
+                <ArrowLeftRight className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                <span className="hidden sm:inline">Sincronizar</span>
+              </button>
+
               {/* School Settings Button */}
               <button
                 type="button"
@@ -209,6 +223,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                         >
                           <Settings className="w-4 h-4 text-slate-500" />
                           Configurações
+                        </button>
+
+                        <button
+                          onClick={onOpenSync}
+                          className="w-full px-3.5 py-2 text-xs text-left text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
+                        >
+                          <ArrowLeftRight className="w-4 h-4 text-indigo-600" />
+                          Sincronizar Dados (Vercel)
                         </button>
                       </div>
 

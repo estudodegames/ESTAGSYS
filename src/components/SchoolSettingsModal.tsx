@@ -10,6 +10,7 @@ import {
   Palette,
   RotateCcw,
   CheckCircle2,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { resetAllDataToDefault } from '../utils/storage';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
@@ -22,6 +23,7 @@ interface SchoolSettingsModalProps {
   onSave: (settings: SchoolSettings) => void;
   onClose: () => void;
   onDataReset: () => void;
+  onOpenSync?: () => void;
 }
 
 export const SchoolSettingsModal: React.FC<SchoolSettingsModalProps> = ({
@@ -32,6 +34,7 @@ export const SchoolSettingsModal: React.FC<SchoolSettingsModalProps> = ({
   onSave,
   onClose,
   onDataReset,
+  onOpenSync,
 }) => {
   const [nomeEscola, setNomeEscola] = useState(settings.nomeEscola);
   const [setorCoordenação, setSetorCoordenação] = useState(settings.setorCoordenação);
@@ -208,6 +211,31 @@ export const SchoolSettingsModal: React.FC<SchoolSettingsModalProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Sync & Backup Preview ⇄ Vercel */}
+          {onOpenSync && (
+            <div className="p-3.5 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-xl border border-indigo-200/80 dark:border-indigo-900/60 flex items-center justify-between gap-3">
+              <div>
+                <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200 block flex items-center gap-1.5">
+                  <ArrowLeftRight className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                  Sincronizar Dados (Preview ⇄ Vercel)
+                </span>
+                <p className="text-2xs text-indigo-700 dark:text-indigo-300">
+                  Transfira seus cadastros entre a visualização e a Vercel com 1 clique (Copiar/Colar ou Backup).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenSync();
+                }}
+                className="px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-2xs shrink-0 flex items-center gap-1"
+              >
+                Abrir Sincronização
+              </button>
+            </div>
+          )}
 
           {/* Reset Demo Data Button */}
           <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
