@@ -98,14 +98,35 @@ export async function testConnection(): Promise<boolean> {
   }
 }
 
+export const FIREBASE_PROJECT_ID = firebaseConfig.projectId;
+export const FIREBASE_AUTH_SETTINGS_URL = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/settings`;
+
 // Google Sign-In with popup
 export async function loginWithGoogle(): Promise<User> {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
-  } catch (err) {
+  } catch (err: any) {
     console.error('Google Sign-In Error:', err);
-    throw err;
+    const code = err?.code || 'auth/unknown';
+    const domain = typeof window !== 'undefined' ? window.location.hostname : '';
+    
+    let friendlyMessage = 'Falha ao autenticar com Google. Tente novamente.';
+    if (code === 'auth/unauthorized-domain') {
+      friendlyMessage = `O domínio "${domain}" ainda não está autorizado no Firebase. Adicione "vercel.app" ou "${domain}" na lista de Domínios Autorizados no Firebase Console do projeto ${FIREBASE_PROJECT_ID}.`;
+    } else if (code === 'auth/popup-blocked') {
+      friendlyMessage = 'A janela de autenticação foi bloqueada pelo navegador. Permita pop-ups para este site e tente novamente.';
+    } else if (code === 'auth/popup-closed-by-user') {
+      friendlyMessage = 'A janela de login do Google foi fechada antes de concluir. Tente novamente.';
+    } else if (err?.message) {
+      friendlyMessage = `${err.message} (${code})`;
+    }
+
+    const enhancedErr: any = new Error(friendlyMessage);
+    enhancedErr.code = code;
+    enhancedErr.domain = domain;
+    enhancedErr.originalError = err;
+    throw enhancedErr;
   }
 }
 

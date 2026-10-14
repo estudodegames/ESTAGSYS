@@ -41,6 +41,7 @@ import {
   saveSettingsToFirestore,
   seedFirestoreIfEmpty,
   syncAllLocalToFirestore,
+  pullAllFromFirestore,
 } from './utils/firestoreService';
 import { Navbar, NavTab } from './components/Navbar';
 import { StudentList } from './components/StudentList';
@@ -117,9 +118,29 @@ export default function App() {
     // Validate connection to Firestore as mandated
     testConnection();
 
-    let unsubStudents: (() => void) | null = null;
-    let unsubMeetings: (() => void) | null = null;
-    let unsubSettings: (() => void) | null = null;
+    // 1. Real-time synchronization for Students (active immediately so Preview mirrors Vercel in real time)
+    const unsubStudents = subscribeStudents((cloudStudents) => {
+      if (cloudStudents) {
+        setStudents(cloudStudents);
+        saveStudents(cloudStudents);
+      }
+    });
+
+    // 2. Real-time synchronization for Meetings
+    const unsubMeetings = subscribeMeetings((cloudMeetings) => {
+      if (cloudMeetings) {
+        setMeetings(cloudMeetings);
+        saveAllMeetings(cloudMeetings);
+      }
+    });
+
+    // 3. Real-time synchronization for Settings
+    const unsubSettings = subscribeSettings((cloudSettings) => {
+      if (cloudSettings) {
+        setSchoolSettings(cloudSettings);
+        saveSettings(cloudSettings);
+      }
+    });
 
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
@@ -140,43 +161,16 @@ export default function App() {
           setCurrentSession(autoUser);
         }
 
-        // Seed Firestore if this is the first deployment to cloud
+        // Seed Firestore if this is the very first installation
         try {
-          const currentLocalStudents = loadStudents();
-          const currentLocalMeetings = loadAllMeetings();
-          const currentLocalSettings = loadSettings();
           await seedFirestoreIfEmpty(
-            currentLocalStudents,
-            currentLocalMeetings,
-            currentLocalSettings
+            loadStudents(),
+            loadAllMeetings(),
+            loadSettings()
           );
         } catch (e) {
           console.warn('Initial cloud seed notice:', e);
         }
-
-        // Real-time synchronization for Students
-        unsubStudents = subscribeStudents((cloudStudents) => {
-          if (cloudStudents && cloudStudents.length > 0) {
-            setStudents(cloudStudents);
-            saveStudents(cloudStudents);
-          }
-        });
-
-        // Real-time synchronization for Meetings
-        unsubMeetings = subscribeMeetings((cloudMeetings) => {
-          if (cloudMeetings && cloudMeetings.length > 0) {
-            setMeetings(cloudMeetings);
-            saveAllMeetings(cloudMeetings);
-          }
-        });
-
-        // Real-time synchronization for Settings
-        unsubSettings = subscribeSettings((cloudSettings) => {
-          if (cloudSettings) {
-            setSchoolSettings(cloudSettings);
-            saveSettings(cloudSettings);
-          }
-        });
       }
     });
 
@@ -322,6 +316,19 @@ export default function App() {
   // Force Full Sync to Cloud
   const handleForceSyncToCloud = async () => {
     await syncAllLocalToFirestore(students, meetings, schoolSettings);
+  };
+
+  // Force Pull from Cloud
+  const handleForcePullFromCloud = async () => {
+    const cloudData = await pullAllFromFirestore();
+    setStudents(cloudData.students);
+    saveStudents(cloudData.students);
+    setMeetings(cloudData.meetings);
+    saveAllMeetings(cloudData.meetings);
+    if (cloudData.settings) {
+      setSchoolSettings(cloudData.settings);
+      saveSettings(cloudData.settings);
+    }
   };
 
   // Auth handlers
@@ -539,6 +546,7 @@ export default function App() {
           await loginWithGoogle();
         }}
         onForceSyncToCloud={handleForceSyncToCloud}
+        onForcePullFromCloud={handleForcePullFromCloud}
         studentsCount={students.length}
         meetingsCount={meetings.length}
       />

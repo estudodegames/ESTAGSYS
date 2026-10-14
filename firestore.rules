@@ -66,9 +66,9 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Students Collection
+    // Students Collection: Read allowed for all users so Preview and Vercel stay in real-time sync; write restricted to verified coordinator
     match /students/{studentId} {
-      allow get, list: if isSignedIn();
+      allow get, list: if true;
       allow create: if isVerifiedUser()
         && isValidId(studentId)
         && request.resource.data.id == studentId
@@ -82,12 +82,11 @@ service cloud.firestore {
 
     // Meetings Collection
     match /meetings/{meetingId} {
-      allow get, list: if isSignedIn();
+      allow get, list: if true;
       allow create: if isVerifiedUser()
         && isValidId(meetingId)
         && request.resource.data.id == meetingId
-        && isValidMeeting(request.resource.data)
-        && exists(/databases/$(database)/documents/students/$(request.resource.data.studentId));
+        && isValidMeeting(request.resource.data);
       allow update: if isVerifiedUser()
         && isValidId(meetingId)
         && request.resource.data.id == resource.data.id
@@ -98,11 +97,17 @@ service cloud.firestore {
 
     // Settings Collection
     match /settings/{settingsId} {
-      allow get, list: if isSignedIn();
+      allow get, list: if true;
       allow create, update: if isVerifiedUser()
         && isValidId(settingsId)
         && isValidSettings(request.resource.data);
       allow delete: if isAdmin();
+    }
+
+    // System Status Collection
+    match /system/{docId} {
+      allow read: if true;
+      allow write: if isVerifiedUser();
     }
 
     // Admins Collection

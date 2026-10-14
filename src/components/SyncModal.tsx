@@ -16,12 +16,17 @@ import {
   Cloud,
   RefreshCw,
   Radio,
+  ExternalLink,
 } from 'lucide-react';
 import {
   exportAllAppData,
   importAllAppData,
   AppExportData,
 } from '../utils/storage';
+import {
+  FIREBASE_PROJECT_ID,
+  FIREBASE_AUTH_SETTINGS_URL,
+} from '../utils/firebase';
 
 interface SyncModalProps {
   isOpen: boolean;
@@ -31,6 +36,7 @@ interface SyncModalProps {
   isCloudConnected?: boolean;
   onGoogleLogin?: () => Promise<void>;
   onForceSyncToCloud?: () => Promise<void>;
+  onForcePullFromCloud?: () => Promise<void>;
   studentsCount?: number;
   meetingsCount?: number;
 }
@@ -43,18 +49,24 @@ export const SyncModal: React.FC<SyncModalProps> = ({
   isCloudConnected,
   onGoogleLogin,
   onForceSyncToCloud,
+  onForcePullFromCloud,
   studentsCount = 0,
   meetingsCount = 0,
 }) => {
   const [activeTab, setActiveTab] = useState<'cloud' | 'quick' | 'file' | 'code'>('cloud');
   const [copiedQuick, setCopiedQuick] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedDomain, setCopiedDomain] = useState(false);
   const [pasteContent, setPasteContent] = useState('');
   const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+  const [unauthorizedDomainInfo, setUnauthorizedDomainInfo] = useState<{ domain: string; code: string } | null>(null);
   const [statusMessage, setStatusMessage] = useState<{
     type: 'success' | 'error';
     text: string;
   } | null>(null);
+
+  const currentHost = typeof window !== 'undefined' ? window.location.hostname : '';
+  const isVercelHost = currentHost.includes('vercel.app');
 
   if (!isOpen) return null;
 
@@ -363,75 +375,210 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                         Para sincronizar automaticamente e não precisar mais copiar e colar entre o Preview e a Vercel, conecte-se com sua conta Google:
                       </p>
                       {onGoogleLogin && (
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            try {
-                              setIsSyncingCloud(true);
-                              await onGoogleLogin();
-                              setStatusMessage({
-                                type: 'success',
-                                text: 'Conectado ao Firebase Cloud com sucesso! Sincronização ativada.',
-                              });
-                            } catch (e) {
-                              setStatusMessage({
-                                type: 'error',
-                                text: 'Falha ao autenticar com Google. Tente novamente.',
-                              });
-                            } finally {
-                              setIsSyncingCloud(false);
-                            }
-                          }}
-                          disabled={isSyncingCloud}
-                          className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-xs flex items-center gap-2"
-                        >
-                          <Cloud className="w-4 h-4" />
-                          {isSyncingCloud ? 'Conectando...' : 'Conectar Conta Google Agora'}
-                        </button>
+                        <div className="space-y-3">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                setIsSyncingCloud(true);
+                                setUnauthorizedDomainInfo(null);
+                                await onGoogleLogin();
+                                setStatusMessage({
+                                  type: 'success',
+                                  text: 'Conectado ao Firebase Cloud com sucesso! Sincronização ativada.',
+                                });
+                              } catch (e: any) {
+                                const code = e?.code || '';
+                                const domain = e?.domain || currentHost;
+                                if (code === 'auth/unauthorized-domain' || e?.message?.includes('unauthorized-domain') || e?.message?.includes('Domínio')) {
+                                  setUnauthorizedDomainInfo({ domain, code: 'auth/unauthorized-domain' });
+                                  setStatusMessage({
+                                    type: 'error',
+                                    text: `O domínio "${domain}" da Vercel precisa ser adicionado aos Domínios Autorizados no Firebase Console. Siga o passo a passo abaixo para resolver em 1 minuto.`,
+                                  });
+                                } else {
+                                  setStatusMessage({
+                                    type: 'error',
+                                    text: e?.message || 'Falha ao autenticar com Google. Tente novamente.',
+                                  });
+                                }
+                              } finally {
+                                setIsSyncingCloud(false);
+                              }
+                            }}
+                            disabled={isSyncingCloud}
+                            className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 rounded-xl transition-all shadow-xs flex items-center gap-2"
+                          >
+                            <Cloud className="w-4 h-4" />
+                            {isSyncingCloud ? 'Conectando...' : 'Conectar Conta Google Agora'}
+                          </button>
+
+                          {/* Domain authorization guidance if on Vercel or after unauthorized-domain error */}
+                          {(unauthorizedDomainInfo || isVercelHost) && (
+                            <div className="mt-3 p-3.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-xs space-y-2.5">
+                              <div className="flex items-start gap-2">
+                                <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                                <div>
+                                  <h4 className="font-bold text-amber-900 dark:text-amber-200">
+                                    Como autorizar este site da Vercel no Firebase (1 minuto)
+                                  </h4>
+                                  <p className="text-3xs text-amber-800 dark:text-amber-300">
+                                    Por segurança, o Google exige que o endereço do seu site seja adicionado na lista de domínios permitidos do projeto.
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-amber-200 dark:border-amber-800/60 text-2xs space-y-2">
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <span className="text-slate-600 dark:text-slate-400 font-medium">
+                                    Endereço para autorizar:
+                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <code className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-mono font-bold rounded">
+                                      {currentHost || 'vercel.app'}
+                                    </code>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        await navigator.clipboard.writeText(currentHost || 'vercel.app');
+                                        setCopiedDomain(true);
+                                        setTimeout(() => setCopiedDomain(false), 2000);
+                                      }}
+                                      className="px-2 py-0.5 text-3xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 rounded transition-colors flex items-center gap-1"
+                                    >
+                                      {copiedDomain ? (
+                                        <>
+                                          <Check className="w-3 h-3 text-emerald-600" />
+                                          Copiado!
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Copy className="w-3 h-3" />
+                                          Copiar
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <ol className="list-decimal list-inside space-y-1 text-slate-600 dark:text-slate-400 leading-relaxed pt-1 border-t border-slate-100 dark:border-slate-800">
+                                  <li>
+                                    Clique no botão abaixo para abrir as configurações de autenticação do Firebase.
+                                  </li>
+                                  <li>
+                                    Na aba <strong>Domínios autorizados (Authorized domains)</strong>, clique no botão <strong>Adicionar domínio (Add domain)</strong>.
+                                  </li>
+                                  <li>
+                                    Cole <strong className="text-slate-900 dark:text-white font-mono">{currentHost || 'vercel.app'}</strong> (ou apenas <strong className="font-mono">vercel.app</strong> para cobrir todos os seus deploys) e clique em <strong>Salvar</strong>.
+                                  </li>
+                                  <li>
+                                    Volte aqui e clique no botão roxo <strong>Conectar Conta Google Agora</strong>. Conectará com sucesso!
+                                  </li>
+                                </ol>
+                              </div>
+
+                              <div className="pt-1 flex justify-end">
+                                <a
+                                  href={FIREBASE_AUTH_SETTINGS_URL}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-3 py-1.5 text-2xs font-bold text-white bg-amber-600 hover:bg-amber-700 active:scale-95 rounded-lg transition-all shadow-xs inline-flex items-center gap-1.5"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                  Abrir Firebase Console ({FIREBASE_PROJECT_ID})
+                                </a>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Botão de Envio Forçado */}
-              {firebaseUser && onForceSyncToCloud && (
-                <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 flex items-center justify-between gap-4">
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                      Forçar Envio de Todos os Cadastros Atuais para a Nuvem
-                    </h4>
-                    <p className="text-2xs text-slate-600 dark:text-slate-400">
-                      Envia todos os {studentsCount} estagiários e {meetingsCount} registros locais para o banco na nuvem.
-                    </p>
+              {/* Cloud Sync Actions: Push and Pull */}
+              <div className="space-y-3">
+                {/* Botão de Envio / Espelhamento para a Nuvem */}
+                {firebaseUser && onForceSyncToCloud && (
+                  <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <Upload className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                        Substituir Nuvem pelos dados deste navegador
+                      </h4>
+                      <p className="text-2xs text-slate-600 dark:text-slate-400 mt-0.5">
+                        Espelha exatamente os dados locais ({studentsCount} estagiários, {meetingsCount} reuniões) para a nuvem. Se você zerou os estagiários aqui, a nuvem também ficará com 0.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          setIsSyncingCloud(true);
+                          await onForceSyncToCloud();
+                          setStatusMessage({
+                            type: 'success',
+                            text: `A nuvem foi atualizada com sucesso! Agora a nuvem possui exatamente ${studentsCount} estagiários e ${meetingsCount} registros.`,
+                          });
+                        } catch (err: any) {
+                          setStatusMessage({
+                            type: 'error',
+                            text: `Erro ao sincronizar: ${err?.message || err}`,
+                          });
+                        } finally {
+                          setIsSyncingCloud(false);
+                        }
+                      }}
+                      disabled={isSyncingCloud}
+                      className="px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 rounded-xl transition-all shadow-xs shrink-0 flex items-center gap-1.5"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isSyncingCloud ? 'animate-spin' : ''}`} />
+                      {isSyncingCloud ? 'Atualizando Nuvem...' : 'Enviar para a Nuvem'}
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        setIsSyncingCloud(true);
-                        await onForceSyncToCloud();
-                        setStatusMessage({
-                          type: 'success',
-                          text: 'Todos os cadastros foram enviados e sincronizados com a nuvem Firebase com sucesso!',
-                        });
-                      } catch (err: any) {
-                        setStatusMessage({
-                          type: 'error',
-                          text: `Erro ao sincronizar: ${err?.message || err}`,
-                        });
-                      } finally {
-                        setIsSyncingCloud(false);
-                      }
-                    }}
-                    disabled={isSyncingCloud}
-                    className="px-4 py-2 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-900/60 dark:hover:bg-indigo-800 rounded-xl transition-all shrink-0 flex items-center gap-1.5"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncingCloud ? 'animate-spin' : ''}`} />
-                    {isSyncingCloud ? 'Enviando...' : 'Enviar Agora'}
-                  </button>
-                </div>
-              )}
+                )}
+
+                {/* Botão de Puxar / Recarregar da Nuvem */}
+                {onForcePullFromCloud && (
+                  <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                        Puxar dados mais recentes da Nuvem
+                      </h4>
+                      <p className="text-2xs text-slate-600 dark:text-slate-400 mt-0.5">
+                        Recarrega imediatamente os dados gravados no Firebase Cloud para este navegador.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          setIsSyncingCloud(true);
+                          await onForcePullFromCloud();
+                          setStatusMessage({
+                            type: 'success',
+                            text: 'Dados puxados da nuvem Firebase com sucesso!',
+                          });
+                        } catch (err: any) {
+                          setStatusMessage({
+                            type: 'error',
+                            text: `Erro ao puxar dados da nuvem: ${err?.message || err}`,
+                          });
+                        } finally {
+                          setIsSyncingCloud(false);
+                        }
+                      }}
+                      disabled={isSyncingCloud}
+                      className="px-3.5 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/70 dark:hover:bg-emerald-900 border border-emerald-300 dark:border-emerald-800 rounded-xl transition-all shrink-0 flex items-center gap-1.5"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      {isSyncingCloud ? 'Baixando...' : 'Puxar da Nuvem'}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

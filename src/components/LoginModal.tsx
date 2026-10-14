@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AppUser } from '../types';
 import { loginUser, registerUser } from '../utils/authStorage';
-import { loginWithGoogle } from '../utils/firebase';
+import { loginWithGoogle, FIREBASE_PROJECT_ID, FIREBASE_AUTH_SETTINGS_URL } from '../utils/firebase';
 import {
   Lock,
   User,
@@ -15,6 +15,7 @@ import {
   School,
   X,
   Cloud,
+  ExternalLink,
 } from 'lucide-react';
 
 interface LoginModalProps {
@@ -129,9 +130,17 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       onSuccess(appUser);
     } catch (err: any) {
       console.error(err);
-      setError(
-        'Falha no login com Google. Verifique se o pop-up de autenticação não foi bloqueado.'
-      );
+      const code = err?.code || '';
+      const domain = err?.domain || (typeof window !== 'undefined' ? window.location.hostname : '');
+      if (code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain') || err?.message?.includes('Domínio')) {
+        setError(
+          `O domínio "${domain}" precisa ser adicionado na lista de 'Domínios Autorizados' no Firebase Console do projeto ${FIREBASE_PROJECT_ID}. Acesse as configurações de autenticação no Firebase e adicione "vercel.app" para liberar.`
+        );
+      } else {
+        setError(
+          err?.message || 'Falha no login com Google. Verifique se o pop-up de autenticação não foi bloqueado.'
+        );
+      }
     } finally {
       setIsGoogleLoading(false);
     }
