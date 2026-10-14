@@ -13,6 +13,9 @@ import {
   Database,
   FileCode,
   RotateCcw,
+  Cloud,
+  RefreshCw,
+  Radio,
 } from 'lucide-react';
 import {
   exportAllAppData,
@@ -24,17 +27,30 @@ interface SyncModalProps {
   isOpen: boolean;
   onClose: () => void;
   onDataImported: () => void;
+  firebaseUser?: any;
+  isCloudConnected?: boolean;
+  onGoogleLogin?: () => Promise<void>;
+  onForceSyncToCloud?: () => Promise<void>;
+  studentsCount?: number;
+  meetingsCount?: number;
 }
 
 export const SyncModal: React.FC<SyncModalProps> = ({
   isOpen,
   onClose,
   onDataImported,
+  firebaseUser,
+  isCloudConnected,
+  onGoogleLogin,
+  onForceSyncToCloud,
+  studentsCount = 0,
+  meetingsCount = 0,
 }) => {
-  const [activeTab, setActiveTab] = useState<'quick' | 'file' | 'code'>('quick');
+  const [activeTab, setActiveTab] = useState<'cloud' | 'quick' | 'file' | 'code'>('cloud');
   const [copiedQuick, setCopiedQuick] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [pasteContent, setPasteContent] = useState('');
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{
     type: 'success' | 'error';
     text: string;
@@ -224,41 +240,53 @@ export const SyncModal: React.FC<SyncModalProps> = ({
 
         {/* Tabs */}
         <div className="px-6 pt-2">
-          <div className="flex border-b border-slate-200 dark:border-slate-800 gap-4">
+          <div className="flex border-b border-slate-200 dark:border-slate-800 gap-4 overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('cloud')}
+              className={`pb-2.5 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 shrink-0 ${
+                activeTab === 'cloud'
+                  ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+              }`}
+            >
+              <Cloud className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              Nuvem Firebase (Automático)
+            </button>
+
             <button
               onClick={() => setActiveTab('quick')}
-              className={`pb-2.5 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 ${
+              className={`pb-2.5 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'quick'
                   ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
                   : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
               }`}
             >
               <ArrowLeftRight className="w-4 h-4" />
-              Transferência Rápida (Copiar & Colar)
+              Copiar & Colar
             </button>
 
             <button
               onClick={() => setActiveTab('file')}
-              className={`pb-2.5 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 ${
+              className={`pb-2.5 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'file'
                   ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
                   : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
               }`}
             >
               <Database className="w-4 h-4" />
-              Arquivo de Backup (.json)
+              Arquivo Backup (.json)
             </button>
 
             <button
               onClick={() => setActiveTab('code')}
-              className={`pb-2.5 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 ${
+              className={`pb-2.5 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'code'
                   ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
                   : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
               }`}
             >
               <FileCode className="w-4 h-4" />
-              Gravar de Fábrica no Código
+              Gravar no Código
             </button>
           </div>
         </div>
@@ -280,6 +308,130 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
               )}
               <span className="leading-snug">{statusMessage.text}</span>
+            </div>
+          )}
+
+          {/* TAB 0: Banco em Nuvem (Firebase) */}
+          {activeTab === 'cloud' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-indigo-50/80 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                      <Cloud className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-900 dark:text-white">
+                        Banco de Dados em Nuvem Firebase Firestore
+                      </h3>
+                      <p className="text-2xs text-slate-500 dark:text-slate-400">
+                        Sincronização bidirecional em tempo real entre o Preview e a Vercel
+                      </p>
+                    </div>
+                  </div>
+
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-3xs font-black uppercase tracking-wider ${
+                      firebaseUser
+                        ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
+                        : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
+                    }`}
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        firebaseUser ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                      }`}
+                    />
+                    {firebaseUser ? 'Nuvem Conectada' : 'Aguardando Login'}
+                  </span>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-indigo-100 dark:border-indigo-900/60 text-xs text-slate-700 dark:text-slate-300 space-y-2">
+                  {firebaseUser ? (
+                    <div>
+                      <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        Conta conectada: <span className="font-mono text-2xs">{firebaseUser.email}</span>
+                      </p>
+                      <p className="text-2xs text-slate-600 dark:text-slate-400 mt-1">
+                        Cada novo estagiário, edição de dados ou reunião salva é gravado instantaneamente no banco de dados em nuvem e replicado para a Vercel e o Preview em tempo real.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-2xs text-slate-600 dark:text-slate-400 mb-2">
+                        Para sincronizar automaticamente e não precisar mais copiar e colar entre o Preview e a Vercel, conecte-se com sua conta Google:
+                      </p>
+                      {onGoogleLogin && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              setIsSyncingCloud(true);
+                              await onGoogleLogin();
+                              setStatusMessage({
+                                type: 'success',
+                                text: 'Conectado ao Firebase Cloud com sucesso! Sincronização ativada.',
+                              });
+                            } catch (e) {
+                              setStatusMessage({
+                                type: 'error',
+                                text: 'Falha ao autenticar com Google. Tente novamente.',
+                              });
+                            } finally {
+                              setIsSyncingCloud(false);
+                            }
+                          }}
+                          disabled={isSyncingCloud}
+                          className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-xs flex items-center gap-2"
+                        >
+                          <Cloud className="w-4 h-4" />
+                          {isSyncingCloud ? 'Conectando...' : 'Conectar Conta Google Agora'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Botão de Envio Forçado */}
+              {firebaseUser && onForceSyncToCloud && (
+                <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 flex items-center justify-between gap-4">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                      Forçar Envio de Todos os Cadastros Atuais para a Nuvem
+                    </h4>
+                    <p className="text-2xs text-slate-600 dark:text-slate-400">
+                      Envia todos os {studentsCount} estagiários e {meetingsCount} registros locais para o banco na nuvem.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        setIsSyncingCloud(true);
+                        await onForceSyncToCloud();
+                        setStatusMessage({
+                          type: 'success',
+                          text: 'Todos os cadastros foram enviados e sincronizados com a nuvem Firebase com sucesso!',
+                        });
+                      } catch (err: any) {
+                        setStatusMessage({
+                          type: 'error',
+                          text: `Erro ao sincronizar: ${err?.message || err}`,
+                        });
+                      } finally {
+                        setIsSyncingCloud(false);
+                      }
+                    }}
+                    disabled={isSyncingCloud}
+                    className="px-4 py-2 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-900/60 dark:hover:bg-indigo-800 rounded-xl transition-all shrink-0 flex items-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncingCloud ? 'animate-spin' : ''}`} />
+                    {isSyncingCloud ? 'Enviando...' : 'Enviar Agora'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

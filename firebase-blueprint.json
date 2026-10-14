@@ -1,0 +1,210 @@
+{
+  "entities": {
+    "student": {
+      "title": "Student",
+      "description": "Estagiário cadastrado para acompanhamento na escola técnica",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "matricula": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "nomeCompleto": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "sexo": {
+          "type": "string",
+          "enum": ["Feminino", "Masculino", "Outro", "Prefiro não informar"]
+        },
+        "telefone": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "curso": {
+          "type": "string",
+          "enum": ["Informática", "Jogos", "Redes"]
+        },
+        "turma": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "anoEstudo": {
+          "type": "string",
+          "maxLength": 4,
+          "minLength": 4
+        },
+        "modalidade": {
+          "type": "string",
+          "enum": ["interno", "externo"]
+        },
+        "localEstagio": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "supervisorNome": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "supervisorCargo": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "ativo": {
+          "type": "boolean"
+        },
+        "dataCriacao": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "updatedAt": {
+          "type": "string",
+          "maxLength": 50
+        }
+      },
+      "required": [
+        "id",
+        "matricula",
+        "nomeCompleto",
+        "sexo",
+        "curso",
+        "turma",
+        "anoEstudo",
+        "modalidade",
+        "localEstagio",
+        "supervisorNome",
+        "ativo"
+      ]
+    },
+    "meeting": {
+      "title": "MonthlyMeetingControl",
+      "description": "Controle de comparecimento e registro de reunião mensal de estágio",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "studentId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "mesAno": {
+          "type": "string",
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}$"
+        },
+        "ano": {
+          "type": "integer"
+        },
+        "mes": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "Presente",
+            "Falta",
+            "Estágio Cancelado",
+            "Estágio Concluído",
+            "Pendente"
+          ]
+        },
+        "dataReuniao": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "teveProblemaRotina": {
+          "type": "boolean"
+        },
+        "relatoProblemaOuObservacao": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "ultimaModificacao": {
+          "type": "string",
+          "maxLength": 50
+        }
+      },
+      "required": [
+        "id",
+        "studentId",
+        "mesAno",
+        "ano",
+        "mes",
+        "status",
+        "dataReuniao"
+      ]
+    },
+    "schoolSettings": {
+      "title": "SchoolSettings",
+      "description": "Configurações institucionais da escola e coordenação",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "nomeEscola": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "setorCoordenação": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "nomeCoordenador": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "cargoCoordenador": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "emailEscola": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "logoUrl": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "updatedAt": {
+          "type": "string",
+          "maxLength": 50
+        }
+      },
+      "required": [
+        "nomeEscola",
+        "setorCoordenação",
+        "nomeCoordenador",
+        "cargoCoordenador"
+      ]
+    }
+  },
+  "firestore": {
+    "/students/{studentId}": {
+      "schema": "student",
+      "description": "Lista de estagiários cadastrados para controle escolar"
+    },
+    "/meetings/{meetingId}": {
+      "schema": "meeting",
+      "description": "Registros de frequência das reuniões mensais de estágio"
+    },
+    "/settings/{settingsId}": {
+      "schema": "schoolSettings",
+      "description": "Configurações da escola e da coordenação"
+    }
+  }
+}

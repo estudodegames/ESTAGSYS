@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import {
   Student,
   MonthlyMeetingControl,
@@ -14,6 +15,7 @@ import {
   loadStudents,
   saveStudents,
   loadAllMeetings,
+  saveAllMeetings,
   saveStudentMeeting,
   deleteStudent,
   loadSettings,
@@ -23,6 +25,23 @@ import {
   getCurrentSession,
   setCurrentSession,
 } from './utils/authStorage';
+import {
+  auth,
+  loginWithGoogle,
+  logoutFirebase,
+  testConnection,
+} from './utils/firebase';
+import {
+  subscribeStudents,
+  subscribeMeetings,
+  subscribeSettings,
+  saveStudentToFirestore,
+  deleteStudentFromFirestore,
+  saveMeetingToFirestore,
+  saveSettingsToFirestore,
+  seedFirestoreIfEmpty,
+  syncAllLocalToFirestore,
+} from './utils/firestoreService';
 import { Navbar, NavTab } from './components/Navbar';
 import { StudentList } from './components/StudentList';
 import { StudentModal } from './components/StudentModal';
@@ -35,6 +54,7 @@ import { LoginModal } from './components/LoginModal';
 import { UserManagementModal } from './components/UserManagementModal';
 import { ConfirmDeleteModal } from './components/ConfirmDeleteModal';
 import { SyncModal } from './components/SyncModal';
+import { Cloud, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
   // Theme state (Modo Claro / Modo Escuro)
@@ -62,6 +82,10 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(() =>
     getCurrentSession()
   );
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(
+    () => auth.currentUser
+  );
+
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
   const [isConfirmLogoutOpen, setIsConfirmLogoutOpen] = useState(false);
@@ -87,6 +111,82 @@ export default function App() {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+
+  // Initialize and attach Firebase Realtime Listeners
+  useEffect(() => {
+    // Validate connection to Firestore as mandated
+    testConnection();
+
+    let unsubStudents: (() => void) | null = null;
+    let unsubMeetings: (() => void) | null = null;
+    let unsubSettings: (() => void) | null = null;
+
+    const unsubAuth = onAuthStateChanged(auth, async (user) => {
+      setFirebaseUser(user);
+
+      if (user) {
+        // Auto-provision local admin session if not already logged in
+        if (!currentUser) {
+          const autoUser: AppUser = {
+            id: user.uid,
+            username: user.email?.split('@')[0] || 'coordenacao',
+            fullName: user.displayName || 'Profª Andrea Vargas',
+            role: 'Administrador',
+            email: user.email || undefined,
+            passwordHash: '',
+            createdAt: new Date().toISOString(),
+          };
+          setCurrentUser(autoUser);
+          setCurrentSession(autoUser);
+        }
+
+        // Seed Firestore if this is the first deployment to cloud
+        try {
+          const currentLocalStudents = loadStudents();
+          const currentLocalMeetings = loadAllMeetings();
+          const currentLocalSettings = loadSettings();
+          await seedFirestoreIfEmpty(
+            currentLocalStudents,
+            currentLocalMeetings,
+            currentLocalSettings
+          );
+        } catch (e) {
+          console.warn('Initial cloud seed notice:', e);
+        }
+
+        // Real-time synchronization for Students
+        unsubStudents = subscribeStudents((cloudStudents) => {
+          if (cloudStudents && cloudStudents.length > 0) {
+            setStudents(cloudStudents);
+            saveStudents(cloudStudents);
+          }
+        });
+
+        // Real-time synchronization for Meetings
+        unsubMeetings = subscribeMeetings((cloudMeetings) => {
+          if (cloudMeetings && cloudMeetings.length > 0) {
+            setMeetings(cloudMeetings);
+            saveAllMeetings(cloudMeetings);
+          }
+        });
+
+        // Real-time synchronization for Settings
+        unsubSettings = subscribeSettings((cloudSettings) => {
+          if (cloudSettings) {
+            setSchoolSettings(cloudSettings);
+            saveSettings(cloudSettings);
+          }
+        });
+      }
+    });
+
+    return () => {
+      unsubAuth();
+      if (unsubStudents) unsubStudents();
+      if (unsubMeetings) unsubMeetings();
+      if (unsubSettings) unsubSettings();
+    };
+  }, []);
 
   // Selected student
   const selectedStudent =
@@ -125,8 +225,8 @@ export default function App() {
     ? getOrCreateMeeting(selectedStudent, selectedMesAno)
     : null;
 
-  // Student CRUD
-  const handleSaveStudent = (studentData: Student) => {
+  // Student CRUD (Local + Cloud Sync)
+  const handleSaveStudent = async (studentData: Student) => {
     let updated: Student[];
     const exists = students.some((s) => s.id === studentData.id);
     if (exists) {
@@ -139,9 +239,18 @@ export default function App() {
     setSelectedStudentId(studentData.id);
     setIsStudentModalOpen(false);
     setEditingStudent(null);
+
+    // Replicate immediately to Firebase Cloud if authenticated
+    if (firebaseUser) {
+      try {
+        await saveStudentToFirestore(studentData);
+      } catch (e) {
+        console.error('Falha ao salvar estagiário na nuvem:', e);
+      }
+    }
   };
 
-  const handleDeleteStudent = (studentId: string) => {
+  const handleDeleteStudent = async (studentId: string) => {
     deleteStudent(studentId);
     const updated = students.filter((s) => s.id !== studentId);
     setStudents(updated);
@@ -149,15 +258,47 @@ export default function App() {
     if (selectedStudentId === studentId && updated.length > 0) {
       setSelectedStudentId(updated[0].id);
     }
+
+    // Replicate delete to Firebase Cloud if authenticated
+    if (firebaseUser) {
+      try {
+        await deleteStudentFromFirestore(studentId);
+      } catch (e) {
+        console.error('Falha ao excluir estagiário na nuvem:', e);
+      }
+    }
   };
 
-  // Meeting Save
-  const handleSaveMeeting = (meetingData: MonthlyMeetingControl) => {
+  // Meeting Save (Local + Cloud Sync)
+  const handleSaveMeeting = async (meetingData: MonthlyMeetingControl) => {
     saveStudentMeeting(meetingData);
     setMeetings(loadAllMeetings());
+
+    // Replicate immediately to Firebase Cloud if authenticated
+    if (firebaseUser) {
+      try {
+        await saveMeetingToFirestore(meetingData);
+      } catch (e) {
+        console.error('Falha ao salvar reunião na nuvem:', e);
+      }
+    }
   };
 
-  // Reset
+  // School Settings Save (Local + Cloud Sync)
+  const handleSaveSchoolSettings = async (newSettings: SchoolSettings) => {
+    setSchoolSettings(newSettings);
+    saveSettings(newSettings);
+
+    if (firebaseUser) {
+      try {
+        await saveSettingsToFirestore(newSettings);
+      } catch (e) {
+        console.error('Falha ao salvar configurações na nuvem:', e);
+      }
+    }
+  };
+
+  // Reset Data
   const handleDataReset = () => {
     setStudents(loadStudents());
     setMeetings(loadAllMeetings());
@@ -178,6 +319,11 @@ export default function App() {
     }
   };
 
+  // Force Full Sync to Cloud
+  const handleForceSyncToCloud = async () => {
+    await syncAllLocalToFirestore(students, meetings, schoolSettings);
+  };
+
   // Auth handlers
   const handleLoginSuccess = (user: AppUser) => {
     setCurrentUser(user);
@@ -185,9 +331,15 @@ export default function App() {
     setIsLoginModalOpen(false);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await logoutFirebase();
+    } catch (e) {
+      console.warn(e);
+    }
     setCurrentUser(null);
     setCurrentSession(null);
+    setFirebaseUser(null);
     setIsConfirmLogoutOpen(false);
   };
 
@@ -198,6 +350,7 @@ export default function App() {
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
         currentUser={currentUser}
+        firebaseUser={firebaseUser}
         onLogout={() => setIsConfirmLogoutOpen(true)}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenSync={() => setIsSyncModalOpen(true)}
@@ -209,7 +362,39 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Visitor Warning */}
+        {/* Firebase Cloud Sync Banner if not logged in */}
+        {!firebaseUser && (
+          <div className="no-print mb-4 p-3.5 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-950/50 dark:to-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Cloud className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="font-bold text-xs text-indigo-950 dark:text-indigo-200 block">
+                  Banco de Dados em Nuvem (Firebase Firestore)
+                </span>
+                <p className="text-2xs text-indigo-700 dark:text-indigo-300">
+                  Para sincronizar seus cadastros entre o Preview e a Vercel automaticamente em tempo real, conecte sua conta Google.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  await loginWithGoogle();
+                } catch (e) {
+                  console.error(e);
+                }
+              }}
+              className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 rounded-xl transition-all shadow-xs shrink-0 flex items-center gap-1.5"
+            >
+              <Cloud className="w-3.5 h-3.5" />
+              Conectar Google
+            </button>
+          </div>
+        )}
+
+        {/* Visitor Warning if no local session */}
         {!currentUser && (
           <div className="no-print mb-6 p-4 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
             <div>
@@ -237,7 +422,7 @@ export default function App() {
             schoolSettings={schoolSettings}
             mesAno={selectedMesAno}
             onChangeMesAno={setSelectedMesAno}
-            onSelectStudentMeeting={(student, mesAno) => {
+            onSelectStudentMeeting={(student: Student, mesAno: string) => {
               setSelectedStudentId(student.id);
               setSelectedMesAno(mesAno);
               setCurrentTab('attendance');
@@ -246,7 +431,7 @@ export default function App() {
           />
         )}
 
-        {/* Tab 1: Estagiários (Clean Student Management) */}
+        {/* Tab 1: Gestão de Estagiários (CRUD) */}
         {currentTab === 'students' && (
           <StudentList
             students={students}
@@ -254,31 +439,31 @@ export default function App() {
               setEditingStudent(null);
               setIsStudentModalOpen(true);
             }}
-            onEdit={(student) => {
+            onEdit={(student: Student) => {
               setEditingStudent(student);
               setIsStudentModalOpen(true);
             }}
             onDelete={handleDeleteStudent}
-            onLaunchMeeting={(student) => {
+            onLaunchMeeting={(student: Student) => {
               setSelectedStudentId(student.id);
               setCurrentTab('attendance');
             }}
-            onViewReport={(student) => {
+            onViewReport={(student: Student) => {
               setSelectedStudentId(student.id);
               setCurrentTab('report_main');
             }}
           />
         )}
 
-        {/* Tab 2: Controle da Reunião Mensal */}
+        {/* Tab 2: Controle de Reunião Mensal */}
         {currentTab === 'attendance' && selectedStudent && currentMeeting && (
           <MonthlyMeetingEditor
             student={selectedStudent}
             students={students}
-            onSelectStudent={(s) => setSelectedStudentId(s.id)}
+            onSelectStudent={(student: Student) => setSelectedStudentId(student.id)}
             initialMeeting={currentMeeting}
             onSaveMeeting={handleSaveMeeting}
-            onViewReport={(student, mesAno) => {
+            onViewReport={(student: Student, mesAno: string) => {
               setSelectedStudentId(student.id);
               setSelectedMesAno(mesAno);
               setCurrentTab('report_main');
@@ -286,15 +471,15 @@ export default function App() {
           />
         )}
 
-        {/* Tab 3: O Relatório Principal (Folha Oficial da Reunião Mensal A4) */}
+        {/* Tab 3: Folha Oficial (Principal) - Comprovante de Comparecimento Mensal */}
         {currentTab === 'report_main' && selectedStudent && currentMeeting && (
           <MonthlyReportPrint
             students={students}
             selectedStudent={selectedStudent}
-            onSelectStudent={(s) => setSelectedStudentId(s.id)}
+            onSelectStudent={(student: Student) => setSelectedStudentId(student.id)}
             meeting={currentMeeting}
             schoolSettings={schoolSettings}
-            onEditMeeting={(studentId, mesAno) => {
+            onEditMeeting={(studentId: string, mesAno: string) => {
               setSelectedStudentId(studentId);
               setSelectedMesAno(mesAno);
               setCurrentTab('attendance');
@@ -302,7 +487,7 @@ export default function App() {
           />
         )}
 
-        {/* Tab 4: Relatório Consolidado das Reuniões */}
+        {/* Tab 4: Relatório Geral Consolidado (Tabela com todos os alunos) */}
         {currentTab === 'consolidated' && (
           <ConsolidatedReport
             students={students}
@@ -310,7 +495,7 @@ export default function App() {
             schoolSettings={schoolSettings}
             mesAno={selectedMesAno}
             onChangeMesAno={setSelectedMesAno}
-            onOpenStudentReport={(student, mesAno) => {
+            onOpenStudentReport={(student: Student, mesAno: string) => {
               setSelectedStudentId(student.id);
               setSelectedMesAno(mesAno);
               setCurrentTab('report_main');
@@ -319,7 +504,8 @@ export default function App() {
         )}
       </main>
 
-      {/* Clean Student Modal */}
+      {/* Modals */}
+      {/* Student Create/Edit Modal */}
       <StudentModal
         isOpen={isStudentModalOpen}
         studentToEdit={editingStudent}
@@ -336,20 +522,25 @@ export default function App() {
         settings={schoolSettings}
         darkMode={darkMode}
         onToggleDarkMode={setDarkMode}
-        onSave={(newSettings) => {
-          setSchoolSettings(newSettings);
-          saveSettings(newSettings);
-        }}
+        onSave={handleSaveSchoolSettings}
         onClose={() => setIsSettingsModalOpen(false)}
         onDataReset={handleDataReset}
         onOpenSync={() => setIsSyncModalOpen(true)}
       />
 
-      {/* Sync & Backup Modal (Preview ⇄ Vercel) */}
+      {/* Sync & Backup Modal (Firebase Cloud + Local Backup) */}
       <SyncModal
         isOpen={isSyncModalOpen}
         onClose={() => setIsSyncModalOpen(false)}
         onDataImported={handleDataImported}
+        firebaseUser={firebaseUser}
+        isCloudConnected={!!firebaseUser}
+        onGoogleLogin={async () => {
+          await loginWithGoogle();
+        }}
+        onForceSyncToCloud={handleForceSyncToCloud}
+        studentsCount={students.length}
+        meetingsCount={meetings.length}
       />
 
       {/* Login & Registration Modal */}
@@ -373,7 +564,7 @@ export default function App() {
       <ConfirmDeleteModal
         isOpen={isConfirmLogoutOpen}
         title="Encerrar Sessão?"
-        message="Tem certeza que deseja sair do sistema? Você precisará informar seu usuário e senha novamente para acessar como administrador."
+        message="Tem certeza que deseja sair do sistema? Você precisará informar seu usuário e senha ou conectar com o Google novamente."
         confirmButtonText="Sim, Sair"
         onConfirm={handleLogout}
         onCancel={() => setIsConfirmLogoutOpen(false)}

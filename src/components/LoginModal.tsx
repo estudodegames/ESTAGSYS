@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AppUser } from '../types';
 import { loginUser, registerUser } from '../utils/authStorage';
+import { loginWithGoogle } from '../utils/firebase';
 import {
   Lock,
   User,
@@ -13,6 +14,7 @@ import {
   Sparkles,
   School,
   X,
+  Cloud,
 } from 'lucide-react';
 
 interface LoginModalProps {
@@ -108,6 +110,33 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     }
   };
 
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+  const handleGoogleSignIn = async () => {
+    setError(null);
+    setIsGoogleLoading(true);
+    try {
+      const user = await loginWithGoogle();
+      const appUser: AppUser = {
+        id: user.uid,
+        username: user.email?.split('@')[0] || 'usuario',
+        fullName: user.displayName || 'Coordenador',
+        role: 'Administrador',
+        email: user.email || undefined,
+        passwordHash: '',
+        createdAt: new Date().toISOString(),
+      };
+      onSuccess(appUser);
+    } catch (err: any) {
+      console.error(err);
+      setError(
+        'Falha no login com Google. Verifique se o pop-up de autenticação não foi bloqueado.'
+      );
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
       <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
@@ -143,6 +172,38 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {!isRegisterMode && (
+            <div className="mb-5 pb-5 border-b border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={isGoogleLoading}
+                className="w-full py-2.5 px-4 text-xs font-bold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 border-2 border-indigo-200 dark:border-indigo-800 rounded-xl transition-all shadow-xs flex items-center justify-center gap-2.5 active:scale-98"
+              >
+                <Cloud className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span>
+                  {isGoogleLoading
+                    ? 'Conectando ao Google...'
+                    : 'Entrar com Conta Google (Sincronização em Nuvem)'}
+                </span>
+              </button>
+              <p className="mt-1.5 text-3xs text-center text-slate-500 dark:text-slate-400">
+                Sincroniza automaticamente entre o Preview e a Vercel
+              </p>
+
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-200 dark:border-slate-800" />
+                </div>
+                <div className="relative flex justify-center text-3xs uppercase">
+                  <span className="bg-white dark:bg-slate-900 px-2 text-slate-400">
+                    ou use usuário e senha locais
+                  </span>
+                </div>
+              </div>
             </div>
           )}
 

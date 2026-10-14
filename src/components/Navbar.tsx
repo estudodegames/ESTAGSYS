@@ -17,6 +17,7 @@ import {
   MessageSquare,
   LayoutDashboard,
   ArrowLeftRight,
+  Cloud,
 } from 'lucide-react';
 
 export type NavTab = 'dashboard' | 'students' | 'attendance' | 'report_main' | 'consolidated';
@@ -25,6 +26,7 @@ interface NavbarProps {
   currentTab: NavTab;
   onSelectTab: (tab: NavTab) => void;
   currentUser: AppUser | null;
+  firebaseUser?: any;
   onLogout: () => void;
   onOpenSettings: () => void;
   onOpenSync: () => void;
@@ -38,6 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentTab,
   onSelectTab,
   currentUser,
+  firebaseUser,
   onLogout,
   onOpenSettings,
   onOpenSync,
@@ -151,15 +154,35 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </button>
 
+              {/* Cloud Status Badge */}
+              {firebaseUser && (
+                <div
+                  onClick={onOpenSync}
+                  className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 rounded-xl text-3xs font-bold cursor-pointer hover:bg-emerald-100 transition-colors"
+                  title="Banco em Nuvem Firebase Ativo - Sincronização em tempo real"
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <Cloud className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Nuvem Ativa</span>
+                </div>
+              )}
+
               {/* Sincronização e Backup Preview ⇄ Vercel */}
               <button
                 type="button"
                 onClick={onOpenSync}
-                className="px-2.5 py-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 rounded-xl transition-all flex items-center gap-1.5 shadow-2xs"
-                title="Sincronizar dados entre Preview e Vercel (Copiar/Colar e Backup)"
+                className="px-2.5 py-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 rounded-xl transition-all flex items-center gap-1.5 shadow-2xs relative"
+                title="Sincronizar dados entre Preview e Vercel (Banco em Nuvem Firebase e Backup)"
               >
-                <ArrowLeftRight className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                {firebaseUser ? (
+                  <Cloud className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <ArrowLeftRight className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                )}
                 <span className="hidden sm:inline">Sincronizar</span>
+                {firebaseUser && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 absolute -top-1 -right-1 ring-2 ring-white dark:ring-slate-900" />
+                )}
               </button>
 
               {/* School Settings Button */}

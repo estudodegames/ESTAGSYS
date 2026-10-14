@@ -1,0 +1,119 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'gamesoundsbr@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidStudent(data) {
+      return data.keys().hasAll(['id', 'matricula', 'nomeCompleto', 'sexo', 'curso', 'turma', 'anoEstudo', 'modalidade', 'localEstagio', 'supervisorNome', 'ativo'])
+        && data.id is string && data.id.size() <= 128
+        && data.matricula is string && data.matricula.size() <= 30
+        && data.nomeCompleto is string && data.nomeCompleto.size() > 0 && data.nomeCompleto.size() <= 150
+        && data.sexo in ['Feminino', 'Masculino', 'Outro', 'Prefiro não informar']
+        && (!('telefone' in data) || (data.telefone is string && data.telefone.size() <= 30))
+        && (!('email' in data) || (data.email is string && data.email.size() <= 100))
+        && data.curso in ['Informática', 'Jogos', 'Redes']
+        && data.turma is string && data.turma.size() <= 50
+        && data.anoEstudo is string && data.anoEstudo.size() == 4
+        && data.modalidade in ['interno', 'externo']
+        && data.localEstagio is string && data.localEstagio.size() <= 200
+        && data.supervisorNome is string && data.supervisorNome.size() <= 150
+        && (!('supervisorCargo' in data) || (data.supervisorCargo is string && data.supervisorCargo.size() <= 100))
+        && data.ativo is bool;
+    }
+
+    function isValidMeeting(data) {
+      return data.keys().hasAll(['id', 'studentId', 'mesAno', 'ano', 'mes', 'status', 'dataReuniao'])
+        && data.id is string && data.id.size() <= 128
+        && data.studentId is string && data.studentId.size() <= 128
+        && data.mesAno is string && data.mesAno.size() <= 10
+        && data.ano is int && data.ano >= 2020 && data.ano <= 2100
+        && data.mes is int && data.mes >= 1 && data.mes <= 12
+        && data.status in ['Presente', 'Falta', 'Estágio Cancelado', 'Estágio Concluído', 'Pendente']
+        && data.dataReuniao is string && data.dataReuniao.size() <= 20
+        && (!('teveProblemaRotina' in data) || data.teveProblemaRotina is bool)
+        && (!('relatoProblemaOuObservacao' in data) || (data.relatoProblemaOuObservacao is string && data.relatoProblemaOuObservacao.size() <= 2000));
+    }
+
+    function isValidSettings(data) {
+      return data.keys().hasAll(['nomeEscola', 'nomeCoordenador', 'cargoCoordenador'])
+        && data.nomeEscola is string && data.nomeEscola.size() <= 200
+        && data.nomeCoordenador is string && data.nomeCoordenador.size() <= 150
+        && data.cargoCoordenador is string && data.cargoCoordenador.size() <= 150
+        && (!('emailEscola' in data) || (data.emailEscola is string && data.emailEscola.size() <= 120))
+        && (!('logoUrl' in data) || (data.logoUrl is string && data.logoUrl.size() <= 2000));
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Students Collection
+    match /students/{studentId} {
+      allow get, list: if isSignedIn();
+      allow create: if isVerifiedUser()
+        && isValidId(studentId)
+        && request.resource.data.id == studentId
+        && isValidStudent(request.resource.data);
+      allow update: if isVerifiedUser()
+        && isValidId(studentId)
+        && request.resource.data.id == resource.data.id
+        && isValidStudent(request.resource.data);
+      allow delete: if isVerifiedUser() && isValidId(studentId);
+    }
+
+    // Meetings Collection
+    match /meetings/{meetingId} {
+      allow get, list: if isSignedIn();
+      allow create: if isVerifiedUser()
+        && isValidId(meetingId)
+        && request.resource.data.id == meetingId
+        && isValidMeeting(request.resource.data)
+        && exists(/databases/$(database)/documents/students/$(request.resource.data.studentId));
+      allow update: if isVerifiedUser()
+        && isValidId(meetingId)
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.studentId == resource.data.studentId
+        && isValidMeeting(request.resource.data);
+      allow delete: if isVerifiedUser() && isValidId(meetingId);
+    }
+
+    // Settings Collection
+    match /settings/{settingsId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isVerifiedUser()
+        && isValidId(settingsId)
+        && isValidSettings(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // Admins Collection
+    match /admins/{adminId} {
+      allow read: if isVerifiedUser();
+      allow write: if isAdmin();
+    }
+
+    // Connection testing
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}
