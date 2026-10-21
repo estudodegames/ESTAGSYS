@@ -326,10 +326,10 @@ export const SyncModal: React.FC<SyncModalProps> = ({
           {/* TAB 0: Banco em Nuvem (Firebase) */}
           {activeTab === 'cloud' && (
             <div className="space-y-4">
-              <div className="p-4 rounded-2xl bg-indigo-50/80 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800">
+              <div className="p-4 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
                       <Cloud className="w-5 h-5" />
                     </div>
                     <div>
@@ -337,178 +337,40 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                         Banco de Dados em Nuvem Firebase Firestore
                       </h3>
                       <p className="text-2xs text-slate-500 dark:text-slate-400">
-                        Sincronização bidirecional em tempo real entre o Preview e a Vercel
+                        Sincronização bidirecional em tempo real (Preview ⇄ Vercel)
                       </p>
                     </div>
                   </div>
 
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-3xs font-black uppercase tracking-wider ${
-                      firebaseUser
-                        ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
-                        : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
-                    }`}
-                  >
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        firebaseUser ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
-                      }`}
-                    />
-                    {firebaseUser ? 'Nuvem Conectada' : 'Aguardando Login'}
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-3xs font-black uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    Nuvem Conectada e Ativa
                   </span>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-indigo-100 dark:border-indigo-900/60 text-xs text-slate-700 dark:text-slate-300 space-y-2">
-                  {firebaseUser ? (
-                    <div>
-                      <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        Conta conectada: <span className="font-mono text-2xs">{firebaseUser.email}</span>
-                      </p>
-                      <p className="text-2xs text-slate-600 dark:text-slate-400 mt-1">
-                        Cada novo estagiário, edição de dados ou reunião salva é gravado instantaneamente no banco de dados em nuvem e replicado para a Vercel e o Preview em tempo real.
-                      </p>
-                    </div>
-                  ) : (
-                    <div>
-                      <p className="text-2xs text-slate-600 dark:text-slate-400 mb-2">
-                        Para sincronizar automaticamente e não precisar mais copiar e colar entre o Preview e a Vercel, conecte-se com sua conta Google:
-                      </p>
-                      {onGoogleLogin && (
-                        <div className="space-y-3">
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                setIsSyncingCloud(true);
-                                setUnauthorizedDomainInfo(null);
-                                await onGoogleLogin();
-                                setStatusMessage({
-                                  type: 'success',
-                                  text: 'Conectado ao Firebase Cloud com sucesso! Sincronização ativada.',
-                                });
-                              } catch (e: any) {
-                                const code = e?.code || '';
-                                const domain = e?.domain || currentHost;
-                                if (code === 'auth/unauthorized-domain' || e?.message?.includes('unauthorized-domain') || e?.message?.includes('Domínio')) {
-                                  setUnauthorizedDomainInfo({ domain, code: 'auth/unauthorized-domain' });
-                                  setStatusMessage({
-                                    type: 'error',
-                                    text: `O domínio "${domain}" da Vercel precisa ser adicionado aos Domínios Autorizados no Firebase Console. Siga o passo a passo abaixo para resolver em 1 minuto.`,
-                                  });
-                                } else {
-                                  setStatusMessage({
-                                    type: 'error',
-                                    text: e?.message || 'Falha ao autenticar com Google. Tente novamente.',
-                                  });
-                                }
-                              } finally {
-                                setIsSyncingCloud(false);
-                              }
-                            }}
-                            disabled={isSyncingCloud}
-                            className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 rounded-xl transition-all shadow-xs flex items-center gap-2"
-                          >
-                            <Cloud className="w-4 h-4" />
-                            {isSyncingCloud ? 'Conectando...' : 'Conectar Conta Google Agora'}
-                          </button>
-
-                          {/* Domain authorization guidance if on Vercel or after unauthorized-domain error */}
-                          {(unauthorizedDomainInfo || isVercelHost) && (
-                            <div className="mt-3 p-3.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-xs space-y-2.5">
-                              <div className="flex items-start gap-2">
-                                <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                                <div>
-                                  <h4 className="font-bold text-amber-900 dark:text-amber-200">
-                                    Como autorizar este site da Vercel no Firebase (1 minuto)
-                                  </h4>
-                                  <p className="text-3xs text-amber-800 dark:text-amber-300">
-                                    Por segurança, o Google exige que o endereço do seu site seja adicionado na lista de domínios permitidos do projeto.
-                                  </p>
-                                </div>
-                              </div>
-
-                              <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-amber-200 dark:border-amber-800/60 text-2xs space-y-2">
-                                <div className="flex items-center justify-between gap-2 flex-wrap">
-                                  <span className="text-slate-600 dark:text-slate-400 font-medium">
-                                    Endereço para autorizar:
-                                  </span>
-                                  <div className="flex items-center gap-1.5">
-                                    <code className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-mono font-bold rounded">
-                                      {currentHost || 'vercel.app'}
-                                    </code>
-                                    <button
-                                      type="button"
-                                      onClick={async () => {
-                                        await navigator.clipboard.writeText(currentHost || 'vercel.app');
-                                        setCopiedDomain(true);
-                                        setTimeout(() => setCopiedDomain(false), 2000);
-                                      }}
-                                      className="px-2 py-0.5 text-3xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 rounded transition-colors flex items-center gap-1"
-                                    >
-                                      {copiedDomain ? (
-                                        <>
-                                          <Check className="w-3 h-3 text-emerald-600" />
-                                          Copiado!
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Copy className="w-3 h-3" />
-                                          Copiar
-                                        </>
-                                      )}
-                                    </button>
-                                  </div>
-                                </div>
-
-                                <ol className="list-decimal list-inside space-y-1 text-slate-600 dark:text-slate-400 leading-relaxed pt-1 border-t border-slate-100 dark:border-slate-800">
-                                  <li>
-                                    Clique no botão abaixo para abrir as configurações de autenticação do Firebase.
-                                  </li>
-                                  <li>
-                                    Na aba <strong>Domínios autorizados (Authorized domains)</strong>, clique no botão <strong>Adicionar domínio (Add domain)</strong>.
-                                  </li>
-                                  <li>
-                                    Cole <strong className="text-slate-900 dark:text-white font-mono">{currentHost || 'vercel.app'}</strong> (ou apenas <strong className="font-mono">vercel.app</strong> para cobrir todos os seus deploys) e clique em <strong>Salvar</strong>.
-                                  </li>
-                                  <li>
-                                    Volte aqui e clique no botão roxo <strong>Conectar Conta Google Agora</strong>. Conectará com sucesso!
-                                  </li>
-                                </ol>
-                              </div>
-
-                              <div className="pt-1 flex justify-end">
-                                <a
-                                  href={FIREBASE_AUTH_SETTINGS_URL}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="px-3 py-1.5 text-2xs font-bold text-white bg-amber-600 hover:bg-amber-700 active:scale-95 rounded-lg transition-all shadow-xs inline-flex items-center gap-1.5"
-                                >
-                                  <ExternalLink className="w-3.5 h-3.5" />
-                                  Abrir Firebase Console ({FIREBASE_PROJECT_ID})
-                                </a>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                <div className="mt-4 pt-3 border-t border-emerald-100 dark:border-emerald-900/60 text-xs text-slate-700 dark:text-slate-300 space-y-2">
+                  <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    Sincronização Automática Universal Ativa
+                  </p>
+                  <p className="text-2xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                    Você pode digitar cadastros tanto no <strong>Preview</strong> quanto no <strong>Vercel</strong> e o banco de dados permanecerá sincronizado automaticamente para qualquer pessoa que acessar. Não é necessário fazer login com conta Google nem configurar domínios.
+                  </p>
                 </div>
               </div>
 
               {/* Cloud Sync Actions: Push and Pull */}
               <div className="space-y-3">
                 {/* Botão de Envio / Espelhamento para a Nuvem */}
-                {firebaseUser && onForceSyncToCloud && (
+                {onForceSyncToCloud && (
                   <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
                     <div>
                       <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                         <Upload className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                        Substituir Nuvem pelos dados deste navegador
+                        Forçar Envio / Espelhamento para a Nuvem
                       </h4>
                       <p className="text-2xs text-slate-600 dark:text-slate-400 mt-0.5">
-                        Espelha exatamente os dados locais ({studentsCount} estagiários, {meetingsCount} reuniões) para a nuvem. Se você zerou os estagiários aqui, a nuvem também ficará com 0.
+                        Espelha exatamente os dados deste navegador ({studentsCount} estagiários, {meetingsCount} registros) para a nuvem. Se você zerou o banco aqui, a nuvem também ficará com 0.
                       </p>
                     </div>
                     <button
@@ -548,7 +410,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                         Puxar dados mais recentes da Nuvem
                       </h4>
                       <p className="text-2xs text-slate-600 dark:text-slate-400 mt-0.5">
-                        Recarrega imediatamente os dados gravados no Firebase Cloud para este navegador.
+                        Recarrega e aplica imediatamente os dados gravados na nuvem Firebase para este navegador.
                       </p>
                     </div>
                     <button

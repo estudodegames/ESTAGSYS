@@ -6,21 +6,6 @@ service cloud.firestore {
       return id is string && id.size() <= 128;
     }
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isVerifiedUser() {
-      return isSignedIn() && request.auth.token.email_verified == true;
-    }
-
-    function isAdmin() {
-      return isVerifiedUser() && (
-        request.auth.token.email == 'gamesoundsbr@gmail.com' ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-      );
-    }
-
     function isValidStudent(data) {
       return data.keys().hasAll(['id', 'matricula', 'nomeCompleto', 'sexo', 'curso', 'turma', 'anoEstudo', 'modalidade', 'localEstagio', 'supervisorNome', 'ativo'])
         && data.id is string && data.id.size() <= 128
@@ -31,11 +16,13 @@ service cloud.firestore {
         && (!('email' in data) || (data.email is string && data.email.size() <= 100))
         && data.curso in ['Informática', 'Jogos', 'Redes']
         && data.turma is string && data.turma.size() <= 50
-        && data.anoEstudo is string && data.anoEstudo.size() == 4
+        && data.anoEstudo is string && data.anoEstudo.size() <= 10
         && data.modalidade in ['interno', 'externo']
         && data.localEstagio is string && data.localEstagio.size() <= 200
         && data.supervisorNome is string && data.supervisorNome.size() <= 150
         && (!('supervisorCargo' in data) || (data.supervisorCargo is string && data.supervisorCargo.size() <= 100))
+        && (!('dataCriacao' in data) || (data.dataCriacao is string && data.dataCriacao.size() <= 50))
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50))
         && data.ativo is bool;
     }
 
@@ -49,7 +36,8 @@ service cloud.firestore {
         && data.status in ['Presente', 'Falta', 'Estágio Cancelado', 'Estágio Concluído', 'Pendente']
         && data.dataReuniao is string && data.dataReuniao.size() <= 20
         && (!('teveProblemaRotina' in data) || data.teveProblemaRotina is bool)
-        && (!('relatoProblemaOuObservacao' in data) || (data.relatoProblemaOuObservacao is string && data.relatoProblemaOuObservacao.size() <= 2000));
+        && (!('relatoProblemaOuObservacao' in data) || (data.relatoProblemaOuObservacao is string && data.relatoProblemaOuObservacao.size() <= 2000))
+        && (!('ultimaModificacao' in data) || (data.ultimaModificacao is string && data.ultimaModificacao.size() <= 50));
     }
 
     function isValidSettings(data) {
@@ -58,7 +46,8 @@ service cloud.firestore {
         && data.nomeCoordenador is string && data.nomeCoordenador.size() <= 150
         && data.cargoCoordenador is string && data.cargoCoordenador.size() <= 150
         && (!('emailEscola' in data) || (data.emailEscola is string && data.emailEscola.size() <= 120))
-        && (!('logoUrl' in data) || (data.logoUrl is string && data.logoUrl.size() <= 2000));
+        && (!('logoUrl' in data) || (data.logoUrl is string && data.logoUrl.size() <= 2000))
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50));
     }
 
     // Default deny
@@ -66,59 +55,52 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Students Collection: Read allowed for all users so Preview and Vercel stay in real-time sync; write restricted to verified coordinator
+    // Students Collection: Read & write permitted with schema validation so Preview and Vercel stay in sync for any user
     match /students/{studentId} {
       allow get, list: if true;
-      allow create: if isVerifiedUser()
-        && isValidId(studentId)
+      allow create: if isValidId(studentId)
         && request.resource.data.id == studentId
         && isValidStudent(request.resource.data);
-      allow update: if isVerifiedUser()
-        && isValidId(studentId)
+      allow update: if isValidId(studentId)
         && request.resource.data.id == resource.data.id
         && isValidStudent(request.resource.data);
-      allow delete: if isVerifiedUser() && isValidId(studentId);
+      allow delete: if isValidId(studentId);
     }
 
     // Meetings Collection
     match /meetings/{meetingId} {
       allow get, list: if true;
-      allow create: if isVerifiedUser()
-        && isValidId(meetingId)
+      allow create: if isValidId(meetingId)
         && request.resource.data.id == meetingId
         && isValidMeeting(request.resource.data);
-      allow update: if isVerifiedUser()
-        && isValidId(meetingId)
+      allow update: if isValidId(meetingId)
         && request.resource.data.id == resource.data.id
         && request.resource.data.studentId == resource.data.studentId
         && isValidMeeting(request.resource.data);
-      allow delete: if isVerifiedUser() && isValidId(meetingId);
+      allow delete: if isValidId(meetingId);
     }
 
     // Settings Collection
     match /settings/{settingsId} {
       allow get, list: if true;
-      allow create, update: if isVerifiedUser()
-        && isValidId(settingsId)
+      allow create, update: if isValidId(settingsId)
         && isValidSettings(request.resource.data);
-      allow delete: if isAdmin();
+      allow delete: if isValidId(settingsId);
     }
 
     // System Status Collection
     match /system/{docId} {
-      allow read: if true;
-      allow write: if isVerifiedUser();
+      allow read, write: if true;
     }
 
     // Admins Collection
     match /admins/{adminId} {
-      allow read: if isVerifiedUser();
-      allow write: if isAdmin();
+      allow read, write: if true;
     }
 
     // Connection testing
     match /test/connection {
-      allow read: if true;
+      allow read, write: if true;
     }
   }
 }

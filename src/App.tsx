@@ -142,35 +142,31 @@ export default function App() {
       }
     });
 
+    // Seed Firestore if this is the very first installation and database is empty
+    seedFirestoreIfEmpty(
+      loadStudents(),
+      loadAllMeetings(),
+      loadSettings()
+    ).catch((e) => {
+      console.warn('Initial cloud seed notice:', e);
+    });
+
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
 
-      if (user) {
+      if (user && !currentUser) {
         // Auto-provision local admin session if not already logged in
-        if (!currentUser) {
-          const autoUser: AppUser = {
-            id: user.uid,
-            username: user.email?.split('@')[0] || 'coordenacao',
-            fullName: user.displayName || 'Profª Andrea Vargas',
-            role: 'Administrador',
-            email: user.email || undefined,
-            passwordHash: '',
-            createdAt: new Date().toISOString(),
-          };
-          setCurrentUser(autoUser);
-          setCurrentSession(autoUser);
-        }
-
-        // Seed Firestore if this is the very first installation
-        try {
-          await seedFirestoreIfEmpty(
-            loadStudents(),
-            loadAllMeetings(),
-            loadSettings()
-          );
-        } catch (e) {
-          console.warn('Initial cloud seed notice:', e);
-        }
+        const autoUser: AppUser = {
+          id: user.uid,
+          username: user.email?.split('@')[0] || 'coordenacao',
+          fullName: user.displayName || 'Profª Andrea Vargas',
+          role: 'Administrador',
+          email: user.email || undefined,
+          passwordHash: '',
+          createdAt: new Date().toISOString(),
+        };
+        setCurrentUser(autoUser);
+        setCurrentSession(autoUser);
       }
     });
 
@@ -234,13 +230,11 @@ export default function App() {
     setIsStudentModalOpen(false);
     setEditingStudent(null);
 
-    // Replicate immediately to Firebase Cloud if authenticated
-    if (firebaseUser) {
-      try {
-        await saveStudentToFirestore(studentData);
-      } catch (e) {
-        console.error('Falha ao salvar estagiário na nuvem:', e);
-      }
+    // Replicate immediately to Firebase Cloud for all users (Preview & Vercel)
+    try {
+      await saveStudentToFirestore(studentData);
+    } catch (e) {
+      console.error('Falha ao salvar estagiário na nuvem:', e);
     }
   };
 
@@ -253,13 +247,11 @@ export default function App() {
       setSelectedStudentId(updated[0].id);
     }
 
-    // Replicate delete to Firebase Cloud if authenticated
-    if (firebaseUser) {
-      try {
-        await deleteStudentFromFirestore(studentId);
-      } catch (e) {
-        console.error('Falha ao excluir estagiário na nuvem:', e);
-      }
+    // Replicate delete to Firebase Cloud for all users
+    try {
+      await deleteStudentFromFirestore(studentId);
+    } catch (e) {
+      console.error('Falha ao excluir estagiário na nuvem:', e);
     }
   };
 
@@ -268,13 +260,11 @@ export default function App() {
     saveStudentMeeting(meetingData);
     setMeetings(loadAllMeetings());
 
-    // Replicate immediately to Firebase Cloud if authenticated
-    if (firebaseUser) {
-      try {
-        await saveMeetingToFirestore(meetingData);
-      } catch (e) {
-        console.error('Falha ao salvar reunião na nuvem:', e);
-      }
+    // Replicate immediately to Firebase Cloud for all users
+    try {
+      await saveMeetingToFirestore(meetingData);
+    } catch (e) {
+      console.error('Falha ao salvar reunião na nuvem:', e);
     }
   };
 
@@ -283,12 +273,10 @@ export default function App() {
     setSchoolSettings(newSettings);
     saveSettings(newSettings);
 
-    if (firebaseUser) {
-      try {
-        await saveSettingsToFirestore(newSettings);
-      } catch (e) {
-        console.error('Falha ao salvar configurações na nuvem:', e);
-      }
+    try {
+      await saveSettingsToFirestore(newSettings);
+    } catch (e) {
+      console.error('Falha ao salvar configurações na nuvem:', e);
     }
   };
 
@@ -369,37 +357,35 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Firebase Cloud Sync Banner if not logged in */}
-        {!firebaseUser && (
-          <div className="no-print mb-4 p-3.5 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-950/50 dark:to-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                <Cloud className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="font-bold text-xs text-indigo-950 dark:text-indigo-200 block">
-                  Banco de Dados em Nuvem (Firebase Firestore)
-                </span>
-                <p className="text-2xs text-indigo-700 dark:text-indigo-300">
-                  Para sincronizar seus cadastros entre o Preview e a Vercel automaticamente em tempo real, conecte sua conta Google.
-                </p>
-              </div>
+        {/* Firebase Cloud Realtime Sync Banner */}
+        <div className="no-print mb-4 p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Cloud className="w-4 h-4" />
             </div>
-            <button
-              onClick={async () => {
-                try {
-                  await loginWithGoogle();
-                } catch (e) {
-                  console.error(e);
-                }
-              }}
-              className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 rounded-xl transition-all shadow-xs shrink-0 flex items-center gap-1.5"
-            >
-              <Cloud className="w-3.5 h-3.5" />
-              Conectar Google
-            </button>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-xs text-emerald-950 dark:text-emerald-200">
+                  Banco de Dados em Nuvem Ativo
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs font-black uppercase tracking-wider bg-emerald-100 dark:bg-emerald-900/80 text-emerald-800 dark:text-emerald-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Sincronização em Tempo Real (Preview ⇄ Vercel)
+                </span>
+              </div>
+              <p className="text-2xs text-emerald-800 dark:text-emerald-300 mt-0.5">
+                Todos os cadastros, edições e exclusões feitos aqui ou no Vercel são salvos e sincronizados automaticamente na nuvem, sem exigir login de conta Google.
+              </p>
+            </div>
           </div>
-        )}
+          <button
+            onClick={() => setIsSyncModalOpen(true)}
+            className="px-3.5 py-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-white dark:bg-slate-900 hover:bg-emerald-100/60 dark:hover:bg-emerald-950 border border-emerald-300 dark:border-emerald-700 active:scale-95 rounded-xl transition-all shadow-2xs shrink-0 flex items-center gap-1.5"
+          >
+            <Cloud className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            Painel da Nuvem
+          </button>
+        </div>
 
         {/* Visitor Warning if no local session */}
         {!currentUser && (
